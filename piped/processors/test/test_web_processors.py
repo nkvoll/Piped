@@ -8,9 +8,9 @@ from StringIO import StringIO
 import mock
 from twisted.trial import unittest
 from twisted.internet import defer
-from twisted.web import http
+from twisted.web import http, iweb
 
-from piped import exceptions
+from piped import exceptions, yamlutil
 from piped.processors import web_processors
 from piped.providers import web_provider
 
@@ -572,3 +572,86 @@ class TestRequestChainer(unittest.TestCase):
         processor.process(dict(request=to_request, proxied_request=from_request))
 
         self.assertFalse(to_request.finished)
+
+
+class TestWebClient(unittest.TestCase):
+
+    def _create_processor(self, **config):
+        return web_processors.WebClient(**config)
+
+    @defer.inlineCallbacks
+    def test_uri_method_headers(self):
+        spec = dict(uri='http://my_uri', method='POST', headers=dict(foo='bar'))
+        
+        processor = self._create_processor(**spec)
+        processor_using_values_from_baton = self._create_processor(
+            uri=yamlutil.BatonPath('uri'), method=yamlutil.BatonPath('method'), headers=yamlutil.BatonPath('headers')
+        )
+
+        def verify(method, uri, headers, bodyProducer):
+            self.assertEquals(method, 'POST')
+            self.assertEquals(uri, 'http://my_uri')
+            self.assertEquals(headers, dict(foo='bar'))
+
+        with mock.patch.object(processor, 'agent') as mocked_agent:
+            mocked_agent.request.side_effect = verify
+            yield processor.process(dict())
+            self.assertEquals(mocked_agent.request.call_count, 1)
+
+        with mock.patch.object(processor_using_values_from_baton, 'agent') as mocked_agent:
+            mocked_agent.request.side_effect = verify
+            yield processor_using_values_from_baton.process(spec)
+            self.assertEquals(mocked_agent.request.call_count, 1)
+
+    @defer.inlineCallbacks
+    def test_string_body(self):
+        processor = self._create_processor(body='this is my body')
+        baton = dict()
+
+        with mock.patch.object(processor, 'agent') as mocked_agent:
+            def verify(method, uri, headers, bodyProducer):
+                self.assertTrue(iweb.IBodyProducer.providedBy(bodyProducer))
+            mocked_agent.request.side_effect = verify
+
+            yield processor.process(baton)
+
+            self.assertEquals(mocked_agent.request.call_count, 1)
+
+    @defer.inlineCallbacks
+    def test_buffer_body(self):
+        processor = self._create_processor(body=StringIO('this is my body'))
+        baton = dict()
+
+        with mock.patch.object(processor, 'agent') as mocked_agent:
+            def verify(method, uri, headers, bodyProducer):
+                self.assertTrue(iweb.IBodyProducer.providedBy(bodyProducer))
+            mocked_agent.request.side_effect = verify
+
+            yield processor.process(baton)
+
+            self.assertEquals(mocked_agent.request.call_count, 1)
+
+    @defer.inlineCallbacks
+    def test_unknown_body(self):
+        processor = self._create_processor(body=dict())
+        baton = dict()
+
+        try:
+            yield processor.process(baton)
+            self.fail('NotImplementedError not raised.')
+        except NotImplementedError as nie:
+            self.assertIn('Cannot adapt', nie.args[0])
+
+    def test_string_producer(self):
+        consumer = StringIO()
+        producer = web_processors.StringProducer('this is my data')
+        producer.startProducing(consumer)
+        consumer.seek(0)
+        self.assertEquals(consumer.read(), 'this is my data')
+
+    def test_buffer_producer(self):
+        consumer = StringIO()
+        producer = web_processors.BufferProducer(StringIO('this is my data'))
+        producer.startProducing(consumer)
+        consumer.seek(0)
+        self.assertEquals(consumer.read(), 'this is my data')

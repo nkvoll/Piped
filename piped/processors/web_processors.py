@@ -6,12 +6,12 @@ import urlparse
 import urllib
 import urllib2
 
-from twisted.web import http
+from twisted.web import http, client, iweb
 from twisted.internet import reactor, defer
 from twisted.web import proxy
 from zope import interface
 
-from piped import util, exceptions, processing
+from piped import util, exceptions, processing, yamlutil
 from piped.processors import base
 from piped.providers import web_provider
 
@@ -455,3 +455,81 @@ class RequestChainer(base.Processor):
             to_request.finish()
 
         return baton
+
+
+class StringProducer(object):
+    interface.implements(iweb.IBodyProducer)
+
+    def __init__(self, body):
+        self.body = str(body)
+        self.length = len(body)
+
+    def startProducing(self, consumer):
+        consumer.write(self.body)
+        return defer.succeed(None)
+
+    def pauseProducing(self):
+        pass
+
+    def stopProducing(self):
+        pass
+
+
+class BufferProducer(object):
+    interface.implements(iweb.IBodyProducer)
+
+    def __init__(self, buffer):
+        self.buffer = buffer
+        self.length = iweb.UNKNOWN_LENGTH
+
+    def startProducing(self, consumer):
+        # TODO: chunked reading
+        consumer.write(self.buffer.read())
+        return defer.succeed(None)
+
+    def pauseProducing(self):
+        pass
+
+    def stopProducing(self):
+        pass
+
+
+class WebClient(base.Processor):
+    """ A web client for HTTP requests. """
+    interface.classProvides(processing.IProcessor)
+    name = 'web-client'
+
+    def __init__(self, method='GET', uri=yamlutil.BatonPath('uri'), headers=None, body='', output_path='response', *a, **kw):
+        super(WebClient, self).__init__(*a, **kw)
+
+        self.agent = client.Agent(reactor)
+
+        self.method = method
+        self.headers = headers
+        self.body = body
+        self.output_path = output_path
+        self.uri = uri
+
+    @defer.inlineCallbacks
+    def process(self, baton):
+        method = self.get_input(baton, self.method)
+        uri = self.get_input(baton, self.uri)
+        headers = self.get_input(baton, self.headers)
+        body = self.get_input(baton, self.body)
+
+        response = yield self.agent.request(method=method, uri=uri, headers=headers, bodyProducer=self._as_body_producer(body))
+
+        baton = self.get_resulting_baton(baton, self.output_path, response)
+        defer.returnValue(baton)
+
+    def _as_body_producer(self, body):
+        if iweb.IBodyProducer.providedBy(body):
+            return body
+
+        if isinstance(body, basestring):
+            return StringProducer(body)
+
+        if hasattr(body, 'read'):
+            return BufferProducer(body)
+
+        raise NotImplementedError('Cannot adapt %r to a %r.' % (body, iweb.IBodyProducer))
