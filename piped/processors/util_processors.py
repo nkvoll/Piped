@@ -817,11 +817,20 @@ class ForEach(base.InputOutputProcessor):
         self.pipeline_dependency = runtime_environment.dependency_manager.add_dependency(self, dict(provider='pipeline.%s' % self.pipeline_name))
         self.result_processor = util.create_lambda_function(self.result_processor_definition, self=self, **self.namespace)
 
+    @defer.inlineCallbacks
     def process_input(self, input, baton):
         if self.chunk_size:
             input = util.chunked(input, self.chunk_size)
 
-        return self._process_iterable(input)
+        if isinstance(input, dict):
+            keys = input.keys()
+            values = input.values()
+            new_values = yield self._process_iterable(values)
+            result = dict(zip(keys, new_values))
+        else:
+            result = yield self._process_iterable(input)
+
+        defer.returnValue(result)
 
     @defer.inlineCallbacks
     def _process_serially(self, input):
