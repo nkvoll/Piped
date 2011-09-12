@@ -7,7 +7,7 @@ import urllib
 import urllib2
 
 from twisted.web import http, client, iweb
-from twisted.internet import reactor, defer
+from twisted.internet import reactor, defer, interfaces
 from twisted.web import proxy
 from zope import interface
 
@@ -533,3 +533,48 @@ class WebClient(base.Processor):
             return BufferProducer(body)
 
         raise NotImplementedError('Cannot adapt %r to a %r.' % (body, iweb.IBodyProducer))
+
+
+class BodyReceiver(object):
+    interface.implements(interfaces.IProtocol)
+
+    def __init__(self):
+        self.deferred = defer.Deferred()
+        self.buffer = list()
+
+    def dataReceived(self, data):
+        self.buffer.append(data)
+
+    def connectionMade(self, transport):
+        pass
+
+    def connectionLost(self, reason):
+        if reason.check(client.ResponseDone, http.PotentialDataLoss):
+            self.deferred.callback(''.join(self.buffer))
+        else:
+            self.deferred.errback(reason)
+
+    def makeConnection(self, transport):
+        pass
+
+
+class GetResponseBody(base.Processor):
+    interface.classProvides(processing.IProcessor)
+    name = 'get-web-response-body'
+
+    def __init__(self, response='response', output_path='body', *a, **kw):
+        super(GetResponseBody, self).__init__(*a, **kw)
+
+        self.response_path = response
+        self.output_path = output_path
+
+    @defer.inlineCallbacks
+    def process(self, baton):
+        response = util.dict_get_path(baton, self.response_path)
+
+        receiver = BodyReceiver()
+        response.deliverBody(receiver)
+        body = yield receiver.deferred
+
+        baton = self.get_resulting_baton(baton, self.output_path, body)
+        defer.returnValue(baton)
