@@ -494,10 +494,47 @@ class BufferProducer(object):
         pass
 
 
-class WebClient(base.Processor):
-    """ A web client for HTTP requests. """
+class ClientGetPage(base.Processor):
+    """ A simple web client agent for simple HTTP requests. """
     interface.classProvides(processing.IProcessor)
-    name = 'web-client'
+    name = 'web-client-get-page'
+
+    def __init__(self, url=yamlutil.BatonPath('url'), method='GET', headers=None, agent=None, timeout=0, cookies=None,
+                 follow_redirect=True, redirect_limit=20, after_found_get=False, output_path='page', postdata=None, *a, **kw):
+        super(ClientGetPage, self).__init__(*a, **kw)
+
+        self.kwargs = dict(
+            url = url,
+            method = method,
+            headers = headers,
+            agent = agent,
+            timeout = timeout,
+            cookies = cookies,
+            followRedirect = follow_redirect,
+            redirectLimit = redirect_limit,
+            afterFoundGet = after_found_get,
+            postdata = postdata
+        )
+
+        self.output_path = output_path
+
+    @defer.inlineCallbacks
+    def process(self, baton):
+        kwargs = self.kwargs.copy()
+
+        for key, value in kwargs.items():
+            kwargs[key] = self.get_input(baton, value)
+
+        response = yield client.getPage(**kwargs)
+
+        baton = self.get_resulting_baton(baton, self.output_path, response)
+        defer.returnValue(baton)
+
+
+class ClientAgent(base.Processor):
+    """ A web client agent for HTTP requests. """
+    interface.classProvides(processing.IProcessor)
+    name = 'web-client-agent'
 
     def __init__(self, method='GET', uri=yamlutil.BatonPath('uri'), headers=None, body='', output_path='response', *a, **kw):
         super(WebClient, self).__init__(*a, **kw)
