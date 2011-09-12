@@ -19,11 +19,15 @@ class JsonDecoder(base.InputOutputProcessor):
     name = 'decode-json'
     interface.classProvides(processing.IProcessor)
 
+    def __init__(self, decoder='json.JSONDecoder', **kw):
+        super(JsonDecoder, self).__init__(**kw)
+        self.json_decoder = reflect.namedAny(decoder)()
+
     def process_input(self, input, baton):
         if hasattr(input, 'read'):
-            return json.load(input)
+            input = input.read()
 
-        return json.loads(input)
+        return self.json_decoder.decode(input)
 
 
 class JsonEncoder(base.InputOutputProcessor):
