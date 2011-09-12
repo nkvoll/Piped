@@ -227,3 +227,100 @@ class TestSearch(SolrProcessorTest, unittest.TestCase):
         request_response =  dict(responseHeader = dict(status=0))
         expected_body = 'q=foo&f.fieldName.hl.snippets=2&wt=json&hl=true&hl.fl=fieldName'
         yield self.assertClientRequests(processor, baton, expected_body, request_response)
+
+
+class TestUpdateXMLParser(unittest.TestCase):
+
+    def get_resulting_dict(self, xml):
+        return processors.UpdateXMLParser().process_input(xml, dict())
+
+    def assertXMLResultsIn(self, xml, expected_result, msg=None):
+        self.assertEquals(self.get_resulting_dict(xml), expected_result, msg)
+
+    def test_simple_add(self):
+        xml = """<add><doc>
+            <field name="employeeId">05991</field>
+            <field name="office">Bridgewater</field>
+            </doc></add>
+        """
+        expected_result = dict(
+            adds=[
+                dict(
+                    docs=[
+                        dict(
+                            fields=dict(
+                                employeeId='05991',
+                                office='Bridgewater'
+                                )
+                            )
+                        ]
+                    )
+                ]
+            )
+
+        self.assertXMLResultsIn(xml, expected_result)
+
+    def test_simple_delete(self):
+        xml = '<delete><id>42</id><id>123</id></delete>'
+        expected_result = dict(deletes=[dict(ids=['42', '123'], queries=[])])
+        self.assertXMLResultsIn(xml, expected_result)
+
+    def test_simple_delete_by_query(self):
+        xml = '<delete><query>foo</query></delete>'
+        expected_result = dict(deletes=[dict(ids=[], queries=['foo'])])
+        self.assertXMLResultsIn(xml, expected_result)
+
+    def test_delete_and_commit(self):
+        xml = '<update><delete><id>42</id></delete><commit /></update>'
+        expected_result = dict(deletes=[dict(ids=['42'], queries=[])], commit=dict())
+        self.assertXMLResultsIn(xml, expected_result)
+
+    def test_commit_and_optimize_with_options(self):
+        xml = '<update><commit foo="bar" /><optimize bar="baz" /></update>'
+        expected_result = dict(commit=dict(foo="bar"), optimize=dict(bar="baz"))
+        self.assertXMLResultsIn(xml, expected_result)
+
+    def test_parsing_update_document_with_a_bit_of_everyting(self):
+        xml = """
+        <update>
+          <add overwrite="true">
+            <doc boost="2.5">
+              <field name="employeeId">05991</field>
+              <field name="office" boost="2.0">Bridgewater</field>
+            </doc>
+            <doc>
+              <field name="employeeId">05991</field>
+              <field name="office" boost="2.0">Waterbridge</field>
+            </doc>
+
+          </add>
+          <delete>
+            <id>05991</id>
+          </delete>
+          <delete fromPending="true">
+            <query>office:Bridgewater</query>
+          </delete>
+          <commit expungeDeletes="true" />
+          <optimize maxSegments="42"/>
+        </update>
+        """
+
+        expected_result = {
+            'adds': [
+                {'docs': [
+                        {'document_boost': '2.5',
+                         'field_boosts': {'office': '2.0'},
+                         'fields': {'employeeId': '05991',
+                                    'office': 'Bridgewater'}},
+                        {'fields': {'employeeId': '05991',
+                                    'office': 'Waterbridge'},
+                         'field_boosts': {'office': '2.0'}}],
+                 'overwrite': 'true'}],
+            'commit': {'expungeDeletes': 'true'},
+            'deletes': [{'ids': ['05991'], 'queries': []},
+                        {'fromPending': 'true',
+                         'ids': [],
+                         'queries': ['office:Bridgewater']}],
+            'optimize': {'maxSegments': '42'}}
+
+        self.assertXMLResultsIn(xml, expected_result)

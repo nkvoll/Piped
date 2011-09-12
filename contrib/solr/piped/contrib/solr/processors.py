@@ -5,6 +5,7 @@
 # the BSD License: http://www.opensource.org/licenses/bsd-license.php
 import copy
 import collections
+import xml.etree.cElementTree as etree
 
 from twisted.internet import defer
 from zope import interface
@@ -257,3 +258,85 @@ class SearchSolr(SolrProcessor):
                 value = ','.join(value)
 
             query_params[path] = value
+
+
+class UpdateXMLParser(base.InputOutputProcessor):
+    interface.classProvides(processing.IProcessor)
+    name = 'parse-solr-update-xml'
+
+    def process_input(self, input, baton):
+        root = etree.fromstring(input)
+        result = dict(
+            adds=self._get_adds(root),
+            deletes=self._get_deletes(root),
+            commit=self._get_commit(root),
+            optimize=self._get_optimize(root)
+        )
+        for key, value in result.items():
+            if value == list() or value is None:
+                del result[key]
+        return result
+
+    def _get_all(self, root, tag_name):
+        if root.tag == tag_name:
+            return [root]
+
+        return root.findall(tag_name)
+
+    def _get_adds(self, root):
+        result = []
+
+        for add_element in self._get_all(root, 'add'):
+            docs = list()
+
+            for doc_element in add_element.findall('doc'):
+                fields = dict()
+                boosts = dict()
+
+                for field_element in doc_element.findall('field'):
+                    field_name = field_element.get('name')
+                    field = fields[field_name] = field_element.text
+                    boost = field_element.get('boost')
+                    if boost:
+                        boosts[field_name] = boost
+
+                doc = dict(fields=fields)
+                if boosts:
+                    doc['field_boosts'] = boosts
+
+                doc_boost = doc_element.get('boost')
+                if doc_boost:
+                    doc['document_boost'] = doc_boost
+                docs.append(doc)
+
+            result.append(dict(add_element.items(), docs=docs))
+
+        return result
+
+    def _get_deletes(self, root):
+        result = []
+        for delete_element in self._get_all(root, 'delete'):
+            result.append(dict(delete_element.items(),
+                               ids=[el.text for el in delete_element.findall('id')],
+                               queries=[el.text for el in delete_element.findall('query')]))
+        return result
+
+    def _get_commit(self, root):
+        commit_elements = self._get_all(root, 'commit')
+        if not commit_elements:
+            return
+
+        commit = dict()
+        for el in commit_elements:
+            commit.update(el.items())
+        return commit
+
+    def _get_optimize(self, root):
+        optimize_elements = self._get_all(root, 'optimize')
+        if not optimize_elements:
+            return
+
+        optimize = dict()
+        for el in optimize_elements:
+            optimize.update(el.items())
+        return optimize
