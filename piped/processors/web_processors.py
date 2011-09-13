@@ -525,6 +525,8 @@ class ClientGetPage(base.Processor):
         for key, value in kwargs.items():
             kwargs[key] = self.get_input(baton, value)
 
+        client.HTTPClientFactory.noisy = False
+
         response = yield client.getPage(**kwargs)
 
         baton = self.get_resulting_baton(baton, self.output_path, response)

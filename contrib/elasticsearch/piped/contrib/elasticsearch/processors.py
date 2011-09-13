@@ -46,3 +46,11 @@ class JsonEncoder(json_processors.JsonEncoder):
 
     def __init__(self, encoder=reflect.fullyQualifiedName(utils.ESJsonEncoder), **kw):
         super(JsonEncoder, self).__init__(encoder=encoder, **kw)
+
+
+class JSONPEncoder(json_processors.JSONPEncoder):
+    name = 'encode-es-jsonp'
+    interface.classProvides(processing.IProcessor)
+
+    def __init__(self, encoder=reflect.fullyQualifiedName(utils.ESJsonEncoder), **kw):
+        super(JSONPEncoder, self).__init__(encoder=encoder, **kw)

@@ -6,7 +6,7 @@
 from twisted.python import reflect
 from zope import interface
 
-from piped import util, processing
+from piped import util, processing, yamlutil
 from piped.processors import base
 
 try:
@@ -62,14 +62,16 @@ class JSONPEncoder(JsonEncoder):
     name = 'encode-jsonp'
     interface.classProvides(processing.IProcessor)
 
-    def __init__(self, callback_path='callback', fallback_to_json=True, **kw):
+    def __init__(self, callback=yamlutil.BatonPath('callback'), fallback_to_json=True, **kw):
         super(JSONPEncoder, self).__init__(**kw)
-        self.callback_path = callback_path
+        self.callback = callback
         self.fallback_to_json = fallback_to_json
 
     def process_input(self, input, baton):
         input = super(JSONPEncoder, self).process_input(input, baton)
-        callback = util.dict_get_path(baton, self.callback_path)
+        callback = self.get_input(baton, self.callback, None)
+        if isinstance(callback, (list, tuple)):
+            callback = callback[0]
         if not callback:
             if self.fallback_to_json:
                 return input

@@ -34,9 +34,9 @@ class Facet(object):
         facet_params['scope'] = data.pop('scope', None)
         facet_params['global'] = data.pop('global', None)
         facet_params['nested'] = data.pop('nested', None)
-        facet_params['nested'] = data.pop('facet_filter', None)
-        if facet_params['nested']:
-            facet_params['nested'] = Filter._unserialize(facet_params['nested'])
+        facet_params['facet_filter'] = data.pop('facet_filter', None)
+        if facet_params['facet_filter']:
+            facet_params['facet_filter'] = Filter._unserialize(facet_params['facet_filter'])
 
         assert len(data.keys()) == 1
 
@@ -191,7 +191,7 @@ class RangeFacet(Facet):
         self.params = params
 
     def serialize(self):
-        data = {}
+        data = dict()
 
         if not self.ranges:
             raise RuntimeError("Invalid ranges")
@@ -214,7 +214,11 @@ class RangeFacet(Facet):
             if self.params:
                 data['params'] = self.params
 
-        return {self._internal_name:data}
+        facet_params = self.serialize_facet_params()
+        res = {self._internal_name:data}
+        res.update(facet_params)
+
+        return res
 
     @classmethod
     def unserialize(cls, data, **facet_params):
