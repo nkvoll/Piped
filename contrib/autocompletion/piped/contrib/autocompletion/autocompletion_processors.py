@@ -9,7 +9,7 @@ import urllib2
 from twisted.internet import reactor, defer, interfaces, threads
 from zope import interface
 
-import autocompleter
+import autocompletion
 from piped import util, processing
 from piped.processors import base
 
@@ -18,12 +18,11 @@ class Autocompleter(base.InputOutputProcessor):
     interface.classProvides(processing.IProcessor)
     name = 'autocomplete'
 
-    def __init__(self, file_path, sentences=False, k=4, expand_if_not_enough=True, expand_min_length=5, **kw):
+    def __init__(self, file_path, sentences=False, k=4, substring_min_length=5, **kw):
         super(Autocompleter, self).__init__(**kw)
-        self.autocompleter = autocompleter.AutoCompleter(file_path)
+        self.autocompleter = autocompletion.AutoCompleter(file_path)
         self.k = k
-        self.expand_if_not_enough = expand_if_not_enough
-        self.expand_min_length = expand_min_length
+        self.substring_min_length = substring_min_length
 
         if sentences:
             self._autocomplete = self.autocompleter.query_for_matching_strings
@@ -35,17 +34,26 @@ class Autocompleter(base.InputOutputProcessor):
 
     def _get_autocompletions(self, query):
         length = len(query)
+        k = self.k
         query = query.encode('utf8')
-        results = self._autocomplete(self.autocompleter.delimiter + query)
 
-        ids = set(result[0] for result in results)
+        queries = [self.autocompleter.delimiter + query, ' ' + query]
+        if length >= self.substring_min_length:
+            queries.append(query)
 
-        if len(results) < self.k and self.expand_if_not_enough and length >= self.expand_min_length:
-            additional_results = self._autocomplete(' ' + query)
-            for result in additional_results:
-                if result[0] not in ids:
-                    results.append(result)
+        results = list()
+        already_included = set()
+        for query in queries:
+            hits = self._autocomplete(query, k)
+            for hit in hits:
+                if hit in already_included:
+                    continue
+                already_included.add(hit)
+                if len(results) < k:
+                    results.append(hit)
+                else:
+                    break
+            if len(results) == k:
+                break
 
         return results
-
-    
