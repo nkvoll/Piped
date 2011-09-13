@@ -524,6 +524,72 @@ Contrib processors
 ------------------
 
 
+Solr processors
+^^^^^^^^^^^^^^^
+
+.. currentmodule:: piped.contrib.solr.processors
+
+.. autoclass:: SolrProcessor
+
+
+.. _add-solr:
+
+add-solr
+""""""""""""""""""""""""""
+
+.. autoclass:: AddSolr
+
+
+
+.. _bind-solr-client:
+
+bind-solr-client
+""""""""""""""""""""""""""
+
+.. autoclass:: SolrBinder
+
+
+
+.. _commit-solr:
+
+commit-solr
+""""""""""""""""""""""""""
+
+.. autoclass:: CommitSolr
+
+
+.. _delete-solr:
+
+delete-solr
+""""""""""""""""""""""""""
+
+.. autoclass:: DeleteSolr
+
+
+.. _optimize-solr:
+
+optimize-solr
+""""""""""""""""""""""""""
+
+.. autoclass:: OptimizeSolr
+
+
+.. _rollback-solr:
+
+rollback-solr
+""""""""""""""""""""""""""
+
+.. autoclass:: RollbackSolr
+
+
+.. _search-solr:
+
+search-solr
+""""""""""""""""""""""""""
+
+.. autoclass:: SearchSolr
+
+
 
 Status testing processors
 ^^^^^^^^^^^^^^^^^^^^^^^^^
