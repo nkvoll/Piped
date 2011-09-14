@@ -537,7 +537,7 @@ class ClientAgent(base.Processor):
     name = 'web-client-agent'
 
     def __init__(self, method='GET', uri=yamlutil.BatonPath('uri'), headers=None, body='', output_path='response', *a, **kw):
-        super(WebClient, self).__init__(*a, **kw)
+        super(ClientAgent, self).__init__(*a, **kw)
 
         self.agent = client.Agent(reactor)
 
