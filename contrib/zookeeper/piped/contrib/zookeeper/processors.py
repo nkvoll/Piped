@@ -118,7 +118,7 @@ class ZooKeeperNodeExists(CachingZooKeeperProcessor):
     interface.classProvides(processing.IProcessor)
     name = 'zookeeper-node-exists'
 
-    def __init__(self, path, cache=False, output_path='data', metadata_output_path=None, *a, **kw):
+    def __init__(self, path, output_path='exists', metadata_output_path=None, *a, **kw):
         super(ZooKeeperNodeExists, self).__init__(*a, **kw)
 
         self.path = path
@@ -133,9 +133,9 @@ class ZooKeeperNodeExists(CachingZooKeeperProcessor):
 
         if self.use_cache:
             cache_key = '{0}/{1}'.format(id(client), path)
-            exists = yield self.call_cached_func(cache_key, client.get_and_watch, path)
+            exists = yield self.call_cached_func(cache_key, client.exists_and_watch, path)
         else:
-            exists = yield client.get(path)
+            exists = yield client.exists(path)
 
         baton = self.get_resulting_baton(baton, self.metadata_output_path, exists)
         baton = self.get_resulting_baton(baton, self.output_path, bool(exists))
