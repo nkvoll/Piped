@@ -12,7 +12,7 @@ from zope import interface
 import zookeeper
 from txzookeeper import client
 
-from piped import resource, event, log, exceptions
+from piped import resource, event, log, exceptions, util
 
 
 class ZookeeperClientProvider(object, service.MultiService):
@@ -68,6 +68,7 @@ class ZookeeperClientProvider(object, service.MultiService):
 
 class PipedZookeeperClient(client.ZookeeperClient, service.Service):
     possible_events = ('starting', 'stopping', 'connected', 'reconnecting', 'reconnected', 'expired')
+    connecting = None
     
     def __init__(self, events = None, *a, **kw):
         super(PipedZookeeperClient, self).__init__(*a, **kw)
@@ -77,9 +78,6 @@ class PipedZookeeperClient(client.ZookeeperClient, service.Service):
         self.on_disconnected = event.Event()
 
         self.set_session_callback(self._watch_connection)
-
-    def wtf(self, *a, **kw):
-        print 'wtf', a, kw
 
     def configure(self, runtime_environment):
         for key, value in self.events.items():
@@ -93,6 +91,7 @@ class PipedZookeeperClient(client.ZookeeperClient, service.Service):
         self.dependencies = runtime_environment.create_dependency_map(self, **self.events)
 
     def _started(self):
+        self.connecting = None
         self.on_connected(self)
         self._on_event('connected')
 
@@ -132,8 +131,12 @@ class PipedZookeeperClient(client.ZookeeperClient, service.Service):
         if not self.running:
             service.Service.startService(self)
             self._on_event('starting')
-            connecting = self.connect(timeout=60*60*24*365)
-            return connecting.addCallback(lambda _: self._started())
+            if self.connecting:
+                log.warn('Started connecting before previous connect finished.')
+                return
+            # TODO: what if I have to stop/start during connecting?
+            self.connecting = self.connect(timeout=60*60*24*365)
+            return self.connecting.addCallback(lambda _: self._started())
 
     def stopService(self):
         if self.running:
