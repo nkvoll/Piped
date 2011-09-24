@@ -7,6 +7,7 @@ import copy
 import collections
 import xml.etree.cElementTree as etree
 
+
 from twisted.internet import defer
 from zope import interface
 from txsolr import client
