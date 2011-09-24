@@ -577,7 +577,7 @@ class TestRequestChainer(unittest.TestCase):
 class TestWebClient(unittest.TestCase):
 
     def _create_processor(self, **config):
-        return web_processors.WebClient(**config)
+        return web_processors.ClientAgent(**config)
 
     @defer.inlineCallbacks
     def test_uri_method_headers(self):
