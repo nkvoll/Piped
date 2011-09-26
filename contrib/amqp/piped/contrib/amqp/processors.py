@@ -18,7 +18,7 @@ class BasicPublish(base.Processor):
     interface.classProvides(processing.IProcessor)
     name = 'amqp-basic-publish'
 
-    def __init__(self, exchange, routing_key=yamlutil.BatonPath('method.routing_key'),
+    def __init__(self, exchange='', routing_key=yamlutil.BatonPath('method.routing_key'),
                 body=yamlutil.BatonPath('body'), properties=yamlutil.BatonPath('properties'),
                 channel=yamlutil.BatonPath('channel'), ack_delivery_tag=None, *a, **kw):
         super(BasicPublish, self).__init__(*a, **kw)
@@ -41,6 +41,42 @@ class BasicPublish(base.Processor):
 
         body = self.get_input(baton, self.body)
         properties = self.get_input(baton, self.properties) or pika.BasicProperties()
+
+        yield channel.basic_publish(exchange=exchange, routing_key=routing_key, body=body, properties=properties)
+
+        if self.ack_delivery_tag:
+            delivery_tag = self.get_input(baton, self.ack_delivery_tag)
+            yield channel.ack(delivery_tag=delivery_tag)
+
+
+class BasicRPCReply(base.Processor):
+    interface.classProvides(processing.IProcessor)
+    name = 'amqp-rpc-reply'
+
+    def __init__(self, exchange='', routing_key=yamlutil.BatonPath('properties.reply_to'),
+                body=yamlutil.BatonPath('body'), correlation_id=yamlutil.BatonPath('properties.correlation_id'),
+                channel=yamlutil.BatonPath('channel'), ack_delivery_tag=None, *a, **kw):
+        super(BasicRPCReply, self).__init__(*a, **kw)
+
+        self.exchange = exchange
+        self.routing_key = routing_key
+
+        self.body = body
+        self.correlation_id = correlation_id
+        self.channel = channel
+
+        self.ack_delivery_tag = ack_delivery_tag
+
+    @defer.inlineCallbacks
+    def process(self, baton):
+        channel = self.get_input(baton, self.channel)
+
+        exchange = self.get_input(baton, self.exchange)
+        routing_key = self.get_input(baton, self.routing_key)
+        correlation_id = self.get_input(baton, self.correlation_id)
+
+        body = self.get_input(baton, self.body)
+        properties = pika.BasicProperties(correlation_id=correlation_id)
 
         yield channel.basic_publish(exchange=exchange, routing_key=routing_key, body=body, properties=properties)
 
@@ -81,30 +117,3 @@ class RPCForwarder(base.Processor):
         if self.ack_delivery_tag:
             delivery_tag = self.get_input(baton, self.ack_delivery_tag)
             yield channel.ack(delivery_tag=delivery_tag)
-
-
-class DependencyUser(base.Processor):
-    interface.classProvides(processing.IProcessor)
-    name = 'invoke-dependency'
-
-    def __init__(self, dependency, baton=yamlutil.BatonPath(''), method='', output_path=None, *a, **kw):
-        super(DependencyUser, self).__init__(*a, **kw)
-
-        if isinstance(dependency, basestring):
-            dependency = dict(provider=dependency)
-        self.dependency_config = dependency
-        self.baton = baton
-        self.method = method
-        self.output_path = output_path
-
-    def configure(self, runtime_environment):
-        dm = runtime_environment.dependency_manager
-        self.dependency = dm.add_dependency(self, self.dependency_config)
-
-    @defer.inlineCallbacks
-    def process(self, baton):
-        dep = yield self.dependency.wait_for_resource()
-        method = getattr(dep, self.method) if self.method else dep
-        result = yield method(self.get_input(baton, self.baton))
-        baton = self.get_resulting_baton(baton, self.output_path, result)
-        defer.returnValue(baton)
