@@ -16,37 +16,42 @@ except ImportError:
 
 
 class JsonDecoder(base.InputOutputProcessor):
+    """ Decodes JSON.
+
+    The input may either be a string or a file-like object.
+    """
     name = 'decode-json'
     interface.classProvides(processing.IProcessor)
 
     def __init__(self, decoder='json.JSONDecoder', **kw):
+        """
+        :param decoder: A fully qualified name of the :class:`json.JSONDecoder`.
+        """
         super(JsonDecoder, self).__init__(**kw)
-        self.json_decoder = reflect.namedAny(decoder)()
+        self.json_decoder = reflect.namedAny(decoder)
 
     def process_input(self, input, baton):
+        loader = json.loads
         if hasattr(input, 'read'):
-            input = input.read()
+            loader = json.load
 
-        return self.json_decoder.decode(input)
+        return loader(input, cls=self.json_decoder)
 
 
 class JsonEncoder(base.InputOutputProcessor):
-    """ In/Out-processor that encodes its input as JSON.
-
-    Actually, it encodes the input with the configured *encoder*,
-    which defaults to `piped.util.PipedJSONEncoder`. It expects the
-    configured encoder to have an `encode(input)`-method.
-    """
+    """ Encodes JSON. """
     name = 'encode-json'
     interface.classProvides(processing.IProcessor)
 
-    # TODO: Should be a callback_path, optionally with a default callback.
     def __init__(self, encoder='piped.util.PipedJSONEncoder', **kw):
+        """
+        :param encoder: A fully qualified name of the :class:`json.JSONEncoder`. 
+        """
         super(JsonEncoder, self).__init__(**kw)
-        self.json_encoder = reflect.namedAny(encoder)()
+        self.json_encoder = reflect.namedAny(encoder)
 
     def process_input(self, input, baton):
-        return self.json_encoder.encode(input)
+        return json.dumps(input, cls=self.json_encoder)
 
 
 class JSONPEncoder(JsonEncoder):
