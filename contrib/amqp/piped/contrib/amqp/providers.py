@@ -337,9 +337,9 @@ class AMQPConsumer(object, service.Service):
         try:
             yield self.process(channel=channel, method=method, properties=properties, body=body)
         except Exception as e:
+            log.warn()
             if self.nack_after_failed_processing:
                 yield channel.basic_reject(delivery_tag=method.delivery_tag)
-            log.warn()
         else:
             if self.ack_after_successful_processing:
                 yield channel.basic_ack(delivery_tag=method.delivery_tag)
@@ -358,18 +358,22 @@ class AMQPConsumer(object, service.Service):
         service.Service.stopService(self)
 
 
-class RPCProvider(object, service.MultiService):
-    """ Embeds manholes in Piped services.
+class RPCClientProvider(object, service.MultiService):
+    """ Provides various RPC clients.
 
-    Configuration example::
+    Configuration example:
+
+    .. code-block:: yaml
 
         amqp:
             clients:
                 my_client:
+                    type: piped.contrib.amqp.providers.RPCClient
                     exchange: gateway_operations
                     consumer:
                         queue_declare:
                             queue: ''
+                            exclusive: true
     """
     interface.classProvides(resource.IResourceProvider)
 
@@ -511,17 +515,9 @@ class RPCClient(object, service.Service):
                 d = defer.maybeDeferred(self.process_response, channel, method, properties, body)
         except defer.CancelledError as ce:
             return
-        except Exception as e:
-            if self.running and self.dependency.is_ready:
-                # if we think this is a transient error, do continue:
-                log.warn()
-                self._consume_queue()
-
-            else:
-                raise
 
     def process_request(self, *a, **kw):
-        pass
+        raise NotImplementedError()
 
     def process_response(self, channel, method, properties, body):
-        pass
+        raise NotImplementedError()
